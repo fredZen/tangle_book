@@ -2,7 +2,8 @@
 # (non-standard GNU make extension)
 .RECIPEPREFIX +=
 
-WORKDIR = fme
+WORKDIR = fme/work
+TMP = fme/tmp
 PAMPHLET = tangle_book.tex
 
 TANGLE = bin/tangle.pl
@@ -24,20 +25,24 @@ reset:
 update_makefile:
     ${EXTRACT} Makefile Makefile
 
-ROCOCO_MAIN = ${WORKDIR}/rococo/src/main/java/org/merizen/tangle
-ROCOCO_TEST = ${WORKDIR}/rococo/src/test/java/org/merizen/tangle
+ROCOCO_MAIN = ${TMP}/rococo/src/main/java/org/merizen/tangle
+ROCOCO_TEST = ${TMP}/rococo/src/test/java/org/merizen/tangle
 
 extract:
-    rm -rf ${WORKDIR}
+    rm -rf ${TMP}
     ${EXTRACT} \
-        shell/tangle.sh ${WORKDIR}/tangle.sh \
-        perl/tangle.pl ${WORKDIR}/tangle.pl \
-        python/tangle.py ${WORKDIR}/tangle.py \
-        rococo/pom.xml  ${WORKDIR}/rococo/pom.xml \
+        shell/tangle.sh ${TMP}/tangle.sh \
+        perl/tangle.pl ${TMP}/tangle.pl \
+        python/tangle.py ${TMP}/tangle.py \
+        rococo/pom.xml  ${TMP}/rococo/pom.xml \
         rococo/Tangle.java ${ROCOCO_MAIN}/Tangle.java \
         rococo/ChunkReaderTest.java ${ROCOCO_TEST}/ChunkReaderTest.java \
-        rococo/OldLatexParserTest.java ${ROCOCO_TEST}/OldLatexParserTest.java \
+        rococo/DumpingFragmentStateTest.java ${ROCOCO_TEST}/DumpingFragmentStateTest.java \
+        rococo/LatexExtractorTest.java ${ROCOCO_TEST}/LatexExtractorTest.java \
         rococo/TangleTest.java ${ROCOCO_TEST}/TangleTest.java
+    mkdir -p ${WORKDIR}
+    rsync -a ${TMP}/ ${WORKDIR}
+    rm -rf ${TMP}
 
 rococo: extract
     cd ${WORKDIR}/rococo; mvn clean install

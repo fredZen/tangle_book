@@ -233,15 +233,91 @@ done
 
 \section{General overview}
 
+\begin{chunk}{rococo/Tangle.java}
+package org.merizen.tangle;
+
+import java.io.*;
+import java.nio.ByteBuffer;
+import java.nio.channels.FileChannel;
+import java.util.*;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
+
+import static java.util.Collections.emptyList;
+import static java.util.Collections.singletonList;
+
+public class Tangle {
+    private final Input in;
+    private final Output out;
+    private final Extractor.Factory extractorFactory;
+
+    public interface Input {
+        CharSequence open(File f);
+    }
+
+    public interface Output {
+        Writer anonymous();
+
+        Writer named(String name);
+    }
+
+    public interface Extractor {
+        interface Factory {
+            Extractor make(CharSequence in);
+        }
+
+        Reader chunkReader(String chunkName);
+    }
+
+    public interface Codec {
+        Writer makeWriter(OutputStream o);
+
+        CharSequence makeCharSequence(ByteBuffer byteBuffer);
+    }
+
+\getchunk{rococo/pass through codec}
+\getchunk{rococo/mapped file input}
+\getchunk{rococo/chunk reader}
+\getchunk{rococo/latex extractor}
+\getchunk{rococo/output}
+\getchunk{rococo/exceptions}
+
+    public static void main(String[] args) {
+        try {
+            makeTangle().run(args);
+        } catch (FatalException e) {
+            System.err.println(e.getLocalizedMessage());
+            System.exit(e.status);
+        }
+    }
+
+    private static Tangle makeTangle() {
+        final Codec codec = new PassThroughCodec();
+        return new Tangle(
+                new MappedFileInput(codec),
+                new MixedOutput(codec),
+                new LatexExtractor.Factory()
+        );
+    }
+
+    Tangle(Input in, Output out, Extractor.Factory extractorFactory) {
+        this.in = in;
+        this.out = out;
+        this.extractorFactory = extractorFactory;
+    }
+\end{chunk}
+
 \section{Parsing program arguments}
+Run extracts the chunk whose name was passed as the second parameter.
+
 \begin{chunk}{rococo/tangle tests}
 @Test
-public void run_extracts_the_chunk_whose_name_was_passed_as_the_second_parameter() throws IOException {
+public void run_with_one_chunk_name() throws IOException {
     // expectations
     context.checking(new Expectations() {{
-        allowing(parserFactory).make(with(any(CharSequence.class)));
-        will(returnValue(parser));
-        oneOf(parser).chunkReader("Tangle.java");
+        allowing(extractorFactory).make(with(any(CharSequence.class)));
+        will(returnValue(extractor));
+        oneOf(extractor).chunkReader("Tangle.java");
         ignoring(in);
         ignoring(out);
     }});
@@ -277,29 +353,31 @@ public class TangleTest {
 
     private Tangle.Input in;
     private Tangle.Output out;
-    private Tangle.Parser.Factory parserFactory;
-    private Tangle.Parser parser;
+    private Tangle.Extractor.Factory extractorFactory;
+    private Tangle.Extractor extractor;
     private Tangle main;
 
     @Before
     public void setup() {
         in = context.mock(Tangle.Input.class);
         out = context.mock(Tangle.Output.class);
-        parserFactory = context.mock(Tangle.Parser.Factory.class);
-        parser = context.mock(Tangle.Parser.class);
-        main = new Tangle(in, out, parserFactory);
+        extractorFactory = context.mock(Tangle.Extractor.Factory.class);
+        extractor = context.mock(Tangle.Extractor.class);
+        main = new Tangle(in, out, extractorFactory);
     }
 \getchunk{rococo/tangle tests}
 }
 \end{chunk}
 
+Run opens the file whose name was passed as the first parameter.
+
 \begin{chunk}{rococo/tangle tests}
 @Test
-public void run_opens_the_file_whose_name_was_passed_as_the_first_parameter() throws IOException {
+public void run_opens_the_pamphlet() throws IOException {
     // expectations
     context.checking(new Expectations() {{
         oneOf(in).open(new File("tangle.pamphlet"));
-        ignoring(parserFactory);
+        ignoring(extractorFactory);
         ignoring(out);
     }});
 
@@ -313,11 +391,11 @@ public void run_opens_the_file_whose_name_was_passed_as_the_first_parameter() th
 public void run_can_extract_multiple_chunks() throws IOException {
     // expectations
     context.checking(new Expectations() {{
-        allowing(parserFactory).make(with(any(CharSequence.class)));
-        will(returnValue(parser));
-        oneOf(parser).chunkReader("first chunk");
+        allowing(extractorFactory).make(with(any(CharSequence.class)));
+        will(returnValue(extractor));
+        oneOf(extractor).chunkReader("first chunk");
         inSequence(inputs);
-        oneOf(parser).chunkReader("second chunk");
+        oneOf(extractor).chunkReader("second chunk");
         inSequence(inputs);
 
         oneOf(out).named("First.java");
@@ -329,7 +407,13 @@ public void run_can_extract_multiple_chunks() throws IOException {
     }});
 
     // execute
-    main.run(new String[]{"tangle.pamphlet", "first chunk", "First.java", "second chunk", "Second.java"});
+    main.run(new String[]{
+            "tangle.pamphlet", 
+            "first chunk", 
+            "First.java", 
+            "second chunk", 
+            "Second.java"
+    });
 }
 \end{chunk}
 
@@ -352,9 +436,10 @@ public void run_expects_at_least_two_parameters() throws IOException {
 }
 \end{chunk}
 
+Run if there are more than two parameters then there must be an odd number of parameters.
 \begin{chunk}{rococo/tangle tests}
 @Test
-public void run_if_there_are_more_than_two_parameters_then_there_must_be_an_odd_number_of_parameters() throws IOException {
+public void run_with_multiple_chunks() throws IOException {
     // set up
     Tangle.WrongNumberOfArgumentsException raised;
 
@@ -371,7 +456,36 @@ public void run_if_there_are_more_than_two_parameters_then_there_must_be_an_odd_
 }
 \end{chunk}
 
-\section{Pumping the chunk parser’s output into a file}
+\begin{chunk}{rococo/Tangle.java}
+    void run(String[] args) throws WrongNumberOfArgumentsException {
+        ensureCorrectArgumentCount(args);
+        final CharSequence pamphlet = in.open(new File(args[0]));
+        final Extractor extractor = extractorFactory.make(pamphlet);
+
+        for (int i = 1; i < args.length; i += 2) {
+            copyStream(extractor.chunkReader(args[i]), makeWriter(args, i+1));
+        }
+    }
+
+    private void ensureCorrectArgumentCount(String[] args) {
+        if (args.length < 2) {
+            throw new WrongNumberOfArgumentsException();
+        }
+        if (args.length > 2 && args.length % 2 == 0) {
+            throw new WrongNumberOfArgumentsException();
+        }
+    }
+
+    private Writer makeWriter(String[] args, int i) {
+        if (i < args.length) {
+            return out.named(args[i]);
+        } else {
+            return out.anonymous();
+        }
+    }
+\end{chunk}
+
+\section{Pumping the chunk extractor’s output into a file}
 \begin{chunk}{rococo/tangle tests}
 @Test
 public void copyStream_copies_its_input_to_its_output() {
@@ -393,101 +507,6 @@ public void copyStream_copies_its_input_to_its_output() {
 \end{chunk}
 
 \begin{chunk}{rococo/Tangle.java}
-package org.merizen.tangle;
-
-import java.io.*;
-import java.nio.ByteBuffer;
-import java.nio.channels.FileChannel;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
-
-import static java.util.Arrays.asList;
-import static java.util.Collections.emptyList;
-import static java.util.Collections.singletonList;
-
-public class Tangle {
-    private final Input in;
-    private final Output out;
-    private final Parser.Factory parserFactory;
-
-    public interface Input {
-        CharSequence open(File f);
-    }
-
-    public interface Output {
-        Writer anonymous();
-
-        Writer named(String name);
-    }
-
-    public interface Parser {
-        interface Factory {
-            Parser make(CharSequence in);
-        }
-
-        Reader chunkReader(String chunkName);
-    }
-
-    public interface Codec {
-        Writer makeWriter(OutputStream o);
-
-        CharSequence makeCharSequence(ByteBuffer byteBuffer);
-    }
-
-\getchunk{rococo/pass through codec}
-\getchunk{rococo/mapped file input}
-\getchunk{rococo/chunk reader}
-\getchunk{rococo/latex parser}
-\getchunk{rococo/output}
-\getchunk{rococo/exceptions}
-
-    public static void main(String[] args) {
-        try {
-            makeTangle().run(args);
-        } catch (FatalException e) {
-            System.err.println(e.getLocalizedMessage());
-            System.exit(e.status);
-        }
-    }
-
-    private static Tangle makeTangle() {
-        final Codec codec = new PassThroughCodec();
-        return new Tangle(new MappedFileInput(codec), new MixedOutput(codec), new OldLatexParser.Factory());
-    }
-
-    Tangle(Input in, Output out, Parser.Factory parserFactory) {
-        this.in = in;
-        this.out = out;
-        this.parserFactory = parserFactory;
-    }
-
-    void run(String[] args) throws WrongNumberOfArgumentsException {
-        if (args.length < 2) {
-            throw new WrongNumberOfArgumentsException();
-        }
-        if (args.length > 2 && args.length % 2 == 0) {
-            throw new WrongNumberOfArgumentsException();
-        }
-        final CharSequence pamphlet = in.open(new File(args[0]));
-        for (int i = 1; i < args.length; i += 2) {
-            streamChunk(
-                    pamphlet,
-                    args[i],
-                    i + 1 < args.length
-                            ? out.named(args[i + 1])
-                            : out.anonymous());
-        }
-    }
-
-    private void streamChunk(CharSequence pamphlet, String chunkName, Writer output) {
-        final Parser parser = parserFactory.make(pamphlet);
-        final Reader reader = parser.chunkReader(chunkName);
-        copyStream(reader, output);
-    }
-
     void copyStream(Reader in, Writer out) {
         char[] buffer = new char[1024];
         int len;
@@ -523,27 +542,25 @@ public class Tangle {
 }
 \end{chunk}
 
-\section{The latex chunk parser (old)}
-\begin{chunk}{rococo/OldLatexParserTest.java}
+\section{The latex chunk extractor}
+\begin{chunk}{rococo/LatexExtractorTest.java}
 package org.merizen.tangle;
 
 import org.junit.Test;
-import org.merizen.tangle.Tangle.ChunkReader.State;
-import org.merizen.tangle.Tangle.OldLatexParser;
+import org.merizen.tangle.Tangle.LatexExtractor;
 
 import java.io.IOException;
 import java.io.Reader;
 import java.nio.CharBuffer;
-import java.util.List;
 
 import static org.assertj.core.api.Assertions.*;
 
-public class OldLatexParserTest {
-\getchunk{rococo/latex parser tests}
+public class LatexExtractorTest {
+\getchunk{rococo/latex extractor tests}
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex parser tests}
+\begin{chunk}{rococo/latex extractor tests}
 @Test
 public void the_makePamphlet_helper_creates_a_charbuffer_with_newlines() {
     // execute
@@ -563,272 +580,9 @@ private CharSequence makePamphlet(String... lines) {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex parser tests}
+\begin{chunk}{rococo/latex extractor tests}
 @Test
-public void LookingForChunk_when_a_chunk_can_be_found_has_DumpingChunk_as_next_state() throws IOException {
-    // set up
-    final CharSequence pamphlet = makePamphlet(
-            "\\begin{chunk}{tangle}",
-            "The contents of",
-            "the chunk",
-            "\\"+"end{chunk}"
-    );
-    final State s = parsingStates(pamphlet, "tangle").lookingForChunk(0);
-
-    // execute
-    s.read(new char[5], 0, 5);
-
-    // verify
-    assertThat(s.getNumCharsRead()).isZero();
-    assertThat(s.getNextStates())
-            .extracting("class")
-            .containsExactly(OldLatexParser.ExtractionStateFactory.DumpingChunkState.class);
-}
-
-private OldLatexParser.ExtractionStateFactory parsingStates(CharSequence pamphlet, String chunkName) {
-    return new OldLatexParser(pamphlet).new ExtractionStateFactory(chunkName);
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void LookingForChunk_when_no_chunk_can_be_found_has_no_next_state() throws IOException {
-    // set up
-    final CharSequence pamphlet = makePamphlet(
-            "Blah blah blah",
-            "There is no matching chunk",
-            "anywhere to be found"
-    );
-    final State s = parsingStates(pamphlet, "tangle").lookingForChunk(0);
-
-    // execute
-    s.read(new char[5], 0, 5);
-
-    // verify
-    assertThat(s.getNumCharsRead()).isZero();
-    assertThat(s.getNextStates()).isEmpty();
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_reads_characters_from_the_input() throws IOException {
-    // set up
-    final CharSequence pamphlet = makePamphlet(
-            "The contents of",
-            "the chunk",
-            "\\"+"end{chunk}"
-    );
-    final int contentsLength = "The contents of\nthe chunk\n".length();
-    final char[] target = new char[contentsLength];
-    final State s = parsingStates(pamphlet, "").dumpingChunk(0);
-
-    // execute
-    s.read(target, 0, contentsLength);
-
-    // verify
-    assertThat(s.getNumCharsRead()).isEqualTo(contentsLength);
-    assertThat(new String(target)).isEqualTo("The contents of\nthe chunk\n");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_starts_reading_at_its_start_offset() throws IOException {
-    // set up
-    final CharSequence pamphlet = "0123456789";
-    final char[] target = new char[5];
-    final State s = parsingStates(pamphlet, "").dumpingChunk(5);
-
-    // execute
-    s.read(target, 0, 5);
-
-    // verify
-    assertThat(new String(target)).isEqualTo("56789");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_starts_writing_at_the_requested_offset() throws IOException {
-    // set up
-    final CharSequence pamphlet = "xxx";
-    final char[] target = "0123456789".toCharArray();
-    final State s = parsingStates(pamphlet, "").dumpingChunk(0);
-
-    // execute
-    s.read(target, 5, 3);
-
-    // verify
-    assertThat(new String(target)).isEqualTo("01234xxx89");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_stops_at_end_chunk_command() throws IOException {
-    // set up
-    final CharSequence pamphlet = makePamphlet(
-            "The contents of",
-            "the chunk",
-            "\\"+"end{chunk}"
-    );
-    final int contentsLength = "The contents of\nthe chunk\n".length();
-    final char[] target = new char[contentsLength + 10];
-    final State s = parsingStates(pamphlet, "").dumpingChunk(0);
-
-    // execute
-    s.read(target, 0, contentsLength + 10);
-
-    // verify
-    assertThat(s.getNumCharsRead()).isEqualTo(contentsLength);
-    assertThat(new String(target)).startsWith("The contents of\nthe chunk\n");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_stops_at_getchunk_command() throws IOException {
-    final CharSequence pamphlet = makePamphlet(
-            "The contents of",
-            "the chunk",
-            "\\"+"getchunk{random}"
-    );
-    final int contentsLength = "The contents of\nthe chunk\n".length();
-    final char[] target = new char[contentsLength + 10];
-    final State s = parsingStates(pamphlet, "").dumpingChunk(0);
-
-    // execute
-    s.read(target, 0, contentsLength + 10);
-
-    // verify
-    assertThat(s.getNumCharsRead()).isEqualTo(contentsLength);
-    assertThat(new String(target)).startsWith("The contents of\nthe chunk\n");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_stops_at_end_of_input() throws IOException {
-    final CharSequence pamphlet = makePamphlet(
-            "The contents of",
-            "the chunk"
-    );
-    final int contentsLength = "The contents of\nthe chunk\n".length();
-    final char[] target = new char[contentsLength + 10];
-    final State s = parsingStates(pamphlet, "").dumpingChunk(0);
-
-    // execute
-    s.read(target, 0, contentsLength + 10);
-
-    // verify
-    assertThat(s.getNumCharsRead()).isEqualTo(contentsLength);
-    assertThat(new String(target)).startsWith("The contents of\nthe chunk\n");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_when_at_end_of_input_has_no_followup_state() throws IOException {
-    final CharSequence pamphlet = makePamphlet(
-            "The contents of",
-            "the chunk"
-    );
-    final int contentsLength = "The contents of\nthe chunk\n".length();
-    final char[] target = new char[contentsLength + 10];
-    final State s = parsingStates(pamphlet, "").dumpingChunk(0);
-
-    // execute
-    s.read(target, 0, contentsLength + 10);
-
-    // verify
-    assertThat(s.getNextStates()).isEmpty();
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_when_at_end_of_chunk_follows_up_with_LookingForChunkState() throws IOException {
-    final CharSequence pamphlet = makePamphlet(
-            "contents",
-            "\\"+"end{chunk}",
-            "filling",
-            "\\begin{chunk}{tangle}",
-            "next chunk"
-    );
-    final char[] target = new char[10];
-    final State s = parsingStates(pamphlet, "tangle").dumpingChunk(0);
-
-    // execute
-    s.read(target, 0, 10);
-
-    // verify
-    final List<? extends State> nextStates = s.getNextStates();
-    assertThat(nextStates).hasSize(1);
-
-    State getChunkState = nextStates.get(0).getNextStates().get(0);
-    getChunkState.read(target, 0, 10);
-    assertThat(getChunkState.getNumCharsRead()).isEqualTo(10);
-    assertThat(new String(target)).isEqualTo("next chunk");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_when_at_midchunk_follows_up_with_itself_with_a_new_offset() throws IOException {
-    final CharSequence pamphlet = "0123456789";
-    final char[] target = new char[1];
-    final State s = parsingStates(pamphlet, "").dumpingChunk(0);
-
-    // execute
-    s.read(target, 0, 1);
-
-    // verify
-    final List<? extends State> nextStates = s.getNextStates();
-    assertThat(nextStates).hasSize(1);
-    State nextState = nextStates.get(0);
-    nextState.read(target, 0, 1);
-
-    assertThat(nextState.getNumCharsRead()).isEqualTo(1);
-    assertThat(new String(target)).isEqualTo("1");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void DumpingChunkState_when_at_getchunk_follows_up_with_a_state_looking_for_the_new_state_followed_by_itself_with_an_offset() throws IOException {
-    final CharSequence pamphlet = makePamphlet(
-            "",
-            "\\getchunk{whatever}",
-            "after getchunk",
-            "\\begin{chunk}{whatever}",
-            "other chunk"
-    );
-    final char[] target = new char[5];
-    final State s = parsingStates(pamphlet, "").dumpingChunk(0);
-
-    // execute
-    s.read(target, 0, 1);
-
-    // verify
-    final List<? extends State> nextStates = s.getNextStates();
-    assertThat(nextStates).hasSize(2);
-
-    State getChunkState = nextStates.get(1).getNextStates().get(0);
-    getChunkState.read(target, 0, 5);
-    assertThat(getChunkState.getNumCharsRead()).isEqualTo(5);
-    assertThat(new String(target)).isEqualTo("other");
-
-    State afterGetchunkState = nextStates.get(0);
-    afterGetchunkState.read(target, 0, 5);
-    assertThat(afterGetchunkState.getNumCharsRead()).isEqualTo(5);
-    assertThat(new String(target)).isEqualTo("after");
-}
-\end{chunk}
-
-\begin{chunk}{rococo/latex parser tests}
-@Test
-public void streamChunk_with_a_chunk_in_a_single_piece() throws IOException {
+public void read_a_chunk_in_a_single_piece() throws IOException {
     // set up
     final CharSequence pamphlet = makePamphlet(
             "\\begin{chunk}{tangle}",
@@ -837,16 +591,20 @@ public void streamChunk_with_a_chunk_in_a_single_piece() throws IOException {
             "\\"+"end{chunk}"
     );
     final CharBuffer out = CharBuffer.allocate(128);
-    final Tangle.Parser parser = new OldLatexParser(pamphlet);
+    final LatexExtractor extractor = extractor(pamphlet);
 
     // execute
-    final Reader reader = parser.chunkReader("tangle");
+    final Reader reader = extractor.chunkReader("tangle");
     final int charCount = reader.read(out);
 
     // verify
     final String expected = "The contents of\nthe chunk\n";
     assertThat(charCount).isEqualTo(expected.length());
     assertThat(dump(out)).isEqualTo(expected);
+}
+
+private LatexExtractor extractor(CharSequence pamphlet) {
+    return new LatexExtractor.Factory().make(pamphlet);
 }
 
 private String dump(CharBuffer b) {
@@ -856,9 +614,9 @@ private String dump(CharBuffer b) {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex parser tests}
+\begin{chunk}{rococo/latex extractor tests}
 @Test
-public void streamChunk_with_a_chunk_in_two_pieces() throws IOException {
+public void read_a_chunk_in_two_pieces() throws IOException {
     // set up
     final CharSequence pamphlet = makePamphlet(
             "\\begin{chunk}{tangle}",
@@ -870,10 +628,10 @@ public void streamChunk_with_a_chunk_in_two_pieces() throws IOException {
             "\\"+"end{chunk}"
     );
     final CharBuffer out = CharBuffer.allocate(128);
-    final Tangle.Parser parser = new OldLatexParser(pamphlet);
+    final LatexExtractor extractor = extractor(pamphlet);
 
     // execute
-    final Reader reader = parser.chunkReader("tangle");
+    final Reader reader = extractor.chunkReader("tangle");
     final int charCount = reader.read(out);
 
     // verify
@@ -883,9 +641,9 @@ public void streamChunk_with_a_chunk_in_two_pieces() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex parser tests}
+\begin{chunk}{rococo/latex extractor tests}
 @Test
-public void streamChunk_with_getchunk() throws IOException {
+public void read_a_chunk_with_getchunk() throws IOException {
     // set up
     final CharSequence pamphlet = makePamphlet(
             "\\begin{chunk}{aux}",
@@ -898,10 +656,10 @@ public void streamChunk_with_getchunk() throws IOException {
             "\\"+"end{chunk}"
     );
     final CharBuffer out = CharBuffer.allocate(128);
-    final Tangle.Parser parser = new OldLatexParser(pamphlet);
+    final LatexExtractor extractor = extractor(pamphlet);
 
     // execute
-    final Reader reader = parser.chunkReader("tangle");
+    final Reader reader = extractor.chunkReader("tangle");
     final int charCount = reader.read(out);
 
     // verify
@@ -911,108 +669,78 @@ public void streamChunk_with_getchunk() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex parser}
-public static class OldLatexParser implements Parser {
+\begin{chunk}{rococo/latex extractor}
+public static class LatexExtractor implements Extractor {
     private final CharSequence in;
+    private final Map<String, List<ChunkReader.State>> chunksByName 
+        = new HashMap<String, List<ChunkReader.State>>();
 
-    private final Matcher inChunkCommandMatcher;
-    private final Matcher newLineMatcher;
-
-    OldLatexParser(CharSequence in) {
+    LatexExtractor(CharSequence in) {
         this.in = in;
-        inChunkCommandMatcher = matcher("^(?:\\\\end\\{chunk})|(?:\\\\getchunk\\{([^}]*)})$");
-        newLineMatcher = matcher("^");
     }
+
+    static class Factory implements Extractor.Factory {
+        public LatexExtractor make(CharSequence in) {
+            LatexExtractor result = new LatexExtractor(in);
+            result.parse();
+            return result;
+        }
+    }
+
+    private void parse() {
+        new Parser().parse();
+    }
+
+    private void addState(String chunkName, ChunkReader.State state) {
+        if (!chunksByName.containsKey(chunkName)) {
+            chunksByName.put(chunkName, new ArrayList<ChunkReader.State>());
+        }
+        chunksByName.get(chunkName).add(state);
+    }
+
+    public Reader chunkReader(String chunkName) {
+        return new ChunkReader(singletonList(new GetChunkState(chunkName)));
+    }
+
+\getchunk{rococo/latex parser}
+\getchunk{rococo/latex reader states}
+}
+\end{chunk}
+
+\subsection{The latex parser}
+\begin{chunk}{rococo/latex parser}
+private class Parser {
+    private final Matcher beginChunkCommandMatcher = 
+            matcher("^\\\\begin\\{chunk}\\{([^}]*)}$");
+    private final Matcher inChunkCommandMatcher = 
+            matcher("^(?:\\\\end\\{chunk})|(?:\\\\getchunk\\{([^}]*)})$");
+    private final Matcher newLineMatcher = 
+            matcher("^");
 
     private Matcher matcher(String regex) {
         return Pattern.compile(regex, Pattern.MULTILINE).matcher(in);
     }
 
-    private static class Factory implements Parser.Factory {
-        public Parser make(CharSequence in) {
-            return new OldLatexParser(in);
-        }
-    }
-
-    class ExtractionStateFactory {
-        private final Matcher beginChunkCommandMatcher;
-
-        ExtractionStateFactory(String chunkName) {
-            beginChunkCommandMatcher = matcher("^\\\\begin\\{chunk}\\{" + chunkName + "}$");
-        }
-
-        ChunkReader.State initialState() {
-            return lookingForChunk(0);
-        }
-
-        ChunkReader.State lookingForChunk(final int start) {
-            return new ChunkReader.State() {
-                public void read(char[] cbuf, int off, int len) throws IOException {
+    private void parse() {
+        int start = 0;
+        String chunkName;
+        while (beginChunkCommandMatcher.find(start)) {
+            start = newLinePositionAfter(beginChunkCommandMatcher.end());
+            chunkName = beginChunkCommandMatcher.group(1);
+            for(;;) {
+                if (!inChunkCommandMatcher.find(start)) {
+                    addState(chunkName, fragment(start, in.length()));
+                    break;
                 }
-
-                public int getNumCharsRead() {
-                    return 0;
-                }
-
-                public List<? extends ChunkReader.State> getNextStates() {
-                    return beginChunkCommandMatcher.find(start)
-                            ? singletonList(dumpingChunk(beginChunkCommandMatcher.end()))
-                            : Collections.<ChunkReader.State>emptyList();
-                }
-            };
-        }
-
-        ChunkReader.State dumpingChunk(int start) {
-            start = newLinePositionAfter(start);
-            final int end;
-            final List<? extends ChunkReader.State> followUpStates;
-            if (!inChunkCommandMatcher.find(start)) {
-                end = in.length();
-                followUpStates = emptyList();
-            } else {
-                end = inChunkCommandMatcher.start();
+                final int end = inChunkCommandMatcher.start();
+                addState(chunkName, fragment(start, end));
+                start = newLinePositionAfter(inChunkCommandMatcher.end());
                 final String requestedChunkName = inChunkCommandMatcher.group(1);
-                final int nextStart = inChunkCommandMatcher.end();
-                followUpStates = requestedChunkName == null
-                        ? singletonList(lookingForChunk(nextStart))
-                        : asList(dumpingChunk(nextStart), new ExtractionStateFactory(requestedChunkName).initialState());
-            }
-            return new DumpingChunkState(start, end, followUpStates);
-        }
-
-        class DumpingChunkState implements ChunkReader.State {
-            private final int start;
-            private final int end;
-            private final List<? extends ChunkReader.State> followUpStates;
-            private int numCharsRead;
-
-            private DumpingChunkState(
-                int start, 
-                int end, 
-                List<? extends ChunkReader.State> followUpStates
-            ) {
-                this.start = start;
-                this.end = end;
-                this.followUpStates = followUpStates;
-            }
-
-            public void read(char[] cbuf, int off, int len) throws IOException {
-                numCharsRead = Math.min(len, end - start);
-                for (int i = 0; i < numCharsRead; i++) {
-                    cbuf[off + i] = in.charAt(start + i);
+                if (requestedChunkName == null) {
+                    break;
+                } else {
+                    addState(chunkName, new GetChunkState(requestedChunkName));
                 }
-            }
-
-            public int getNumCharsRead() {
-                return numCharsRead;
-            }
-
-            public List<? extends ChunkReader.State> getNextStates() {
-                final int newStart = start + numCharsRead;
-                if (newStart < end) {
-                    return singletonList(new DumpingChunkState(newStart, end, followUpStates));
-                }
-                return followUpStates;
             }
         }
     }
@@ -1022,15 +750,157 @@ public static class OldLatexParser implements Parser {
                 ? newLineMatcher.start()
                 : position;
     }
+}
+\end{chunk}
 
-    public Reader chunkReader(String chunkName) {
-        final ExtractionStateFactory stateFactory = new ExtractionStateFactory(chunkName);
-        return new ChunkReader(singletonList(stateFactory.initialState()));
+\subsection{Dumping a fragment}
+
+\begin{chunk}{rococo/dumping fragment state tests}
+@Test
+public void DumpingFragmentState_reads_characters_from_the_input() throws IOException {
+    // set up
+    final CharSequence fragment = "The contents of the fragment";
+    final char[] target = new char[fragment.length()];
+    final State s = fragment(fragment, 0);
+
+    // execute
+    ReadResult r = s.read(target, 0, fragment.length());
+
+    // verify
+    assertThat(r.numCharsRead).isEqualTo(fragment.length());
+    assertThat(new String(target)).isEqualTo("The contents of the fragment");
+}
+
+private State fragment(CharSequence fragment, int start) {
+    return new LatexExtractor(fragment).fragment(start, fragment.length());
+}
+\end{chunk}
+
+\begin{chunk}{rococo/dumping fragment state tests}
+@Test
+public void DumpingFragmentState_starts_reading_at_its_start_offset() throws IOException {
+    // set up
+    final CharSequence fragment = "0123456789";
+    final char[] target = new char[5];
+    final State s = fragment(fragment, 5);
+
+    // execute
+    s.read(target, 0, 5);
+
+    // verify
+    assertThat(new String(target)).isEqualTo("56789");
+}
+\end{chunk}
+
+\begin{chunk}{rococo/dumping fragment state tests}
+@Test
+public void DumpingFragmentState_starts_writing_at_the_requested_offset() throws IOException {
+    // set up
+    final CharSequence fragment = "xxx";
+    final char[] target = "0123456789".toCharArray();
+    final State s = fragment(fragment, 0);
+
+    // execute
+    s.read(target, 5, 3);
+
+    // verify
+    assertThat(new String(target)).isEqualTo("01234xxx89");
+}
+\end{chunk}
+
+DumpingFragmentState when at end of fragment follows up with no state.
+\begin{chunk}{rococo/dumping fragment state tests}
+@Test
+public void DumpingFragmentState_at_end_of_fragment() throws IOException {
+    final CharSequence fragment = "contents";
+    final char[] target = new char[10];
+    final State s = fragment(fragment, 0);
+
+    // execute
+    ReadResult r = s.read(target, 0, 10);
+
+    // verify
+    assertThat(r.nextStates).isEmpty();
+}
+\end{chunk}
+
+DumpingFragmentState when at midfragment follows up with itself with a new offset
+\begin{chunk}{rococo/dumping fragment state tests}
+@Test
+public void DumpingFragmentState_when_at_midfragment() throws IOException {
+    final CharSequence fragment = "abcdef";
+    final char[] target = new char[2];
+    final State s = fragment(fragment, 0);
+
+    // execute
+    final ReadResult r = s.read(target, 0, 1);
+
+    // verify
+    assertThat(r.nextStates).hasSize(1);
+    final State nextState = r.nextStates.get(0);
+    final ReadResult r2 = nextState.read(target, 0, 2);
+
+    assertThat(r2.numCharsRead).isEqualTo(2);
+    assertThat(new String(target)).isEqualTo("bc");
+}
+\end{chunk}
+
+\begin{chunk}{rococo/latex reader states}
+ChunkReader.State fragment(final int start, final int end) {
+    return new ChunkReader.State() {
+        public ChunkReader.ReadResult read(char[] cbuf, int off, int len) {
+            final int numCharsRead = Math.min(len, end - start);
+            for (int i = 0; i < numCharsRead; i++) {
+                cbuf[off + i] = in.charAt(start + i);
+            }
+            final int newStart = start + numCharsRead;
+            final List<? extends ChunkReader.State> nextStates;
+            if (newStart < end) {
+                nextStates = singletonList(fragment(newStart, end));
+            } else {
+                nextStates = emptyList();
+            }
+            return new ChunkReader.ReadResult(numCharsRead, nextStates);
+        }
+    };
+}
+\end{chunk}
+
+\begin{chunk}{rococo/DumpingFragmentStateTest.java}
+package org.merizen.tangle;
+
+import org.junit.Test;
+import org.merizen.tangle.Tangle.ChunkReader.ReadResult;
+import org.merizen.tangle.Tangle.ChunkReader.State;
+import org.merizen.tangle.Tangle.LatexExtractor;
+
+import java.io.IOException;
+import java.io.Reader;
+import java.nio.CharBuffer;
+import java.util.List;
+
+import static org.assertj.core.api.Assertions.*;
+
+public class DumpingFragmentStateTest {
+\getchunk{rococo/dumping fragment state tests}
+}
+\end{chunk}
+
+\subsection{Refering another chunk}
+\begin{chunk}{rococo/latex reader states}
+class GetChunkState implements ChunkReader.State {
+    private final String chunkName;
+
+    private GetChunkState(String chunkName) {
+        this.chunkName = chunkName;
+    }
+
+    public ChunkReader.ReadResult read(char[] cbuf, int off, int len) {
+        return new ChunkReader.ReadResult(0, chunksByName.get(chunkName));
     }
 }
 \end{chunk}
 
-\section{Monotone parser}
 \section{The chunk reader}
 \begin{chunk}{rococo/ChunkReaderTest.java}
 package org.merizen.tangle;
@@ -1082,9 +952,7 @@ public void when_there_is_a_state_it_does_the_reading() throws IOException {
     // expectations
     context.checking(new Expectations() {{
         oneOf(s).read(target, 0, 5);
-        allowing(s).getNumCharsRead();
-        will(returnValue(3));
-        ignoring(s).getNextStates();
+        will(returnValue(new ChunkReader.ReadResult(3, Collections.<State>emptyList())));
     }});
 
     // execute
@@ -1104,10 +972,12 @@ public void states_are_consumed_by_reading_from_them() throws IOException {
 
     // expectations
     context.checking(new Expectations() {{
-        atMost(1).of(s).read(with(any(char[].class)), with(any(int.class)), with(any(int.class)));
-        atMost(1).of(s).getNumCharsRead();
-        will(returnValue(1));
-        ignoring(s).getNextStates();
+        atMost(1).of(s).read(
+                with(any(char[].class)), 
+                with(any(int.class)), 
+                with(any(int.class))
+        );
+        will(returnValue(new ChunkReader.ReadResult(1, Collections.<State>emptyList())));
     }});
 
     // execute
@@ -1132,21 +1002,29 @@ public void read_pushes_followup_states_onto_the_stack() throws IOException {
 
     // expectations
     context.checking(new Expectations() {{
-        allowing(s1).read(with(any(char[].class)), with(any(int.class)), with(any(int.class)));
+        allowing(s1).read(
+                with(any(char[].class)), 
+                with(any(int.class)), 
+                with(any(int.class))
+        );
         inSequence(states);
-        ignoring(s1).getNumCharsRead();
-        allowing(s1).getNextStates();
-        will(returnValue(asList(s3, s2)));
+        will(returnValue(new ChunkReader.ReadResult(0, asList(s2, s3))));
 
-        oneOf(s2).read(with(any(char[].class)), with(any(int.class)), with(any(int.class)));
+        oneOf(s2).read(
+                with(any(char[].class)), 
+                with(any(int.class)), 
+                with(any(int.class))
+        );
         inSequence(states);
-        ignoring(s2).getNextStates();
-        ignoring(s2).getNumCharsRead();
+        will(returnValue(new ChunkReader.ReadResult(0, Collections.<State>emptyList())));
 
-        oneOf(s3).read(with(any(char[].class)), with(any(int.class)), with(any(int.class)));
+        oneOf(s3).read(
+                with(any(char[].class)), 
+                with(any(int.class)), 
+                with(any(int.class))
+        );
         inSequence(states);
-        ignoring(s3).getNextStates();
-        ignoring(s3).getNumCharsRead();
+        will(returnValue(new ChunkReader.ReadResult(0, Collections.<State>emptyList())));
     }});
 
     // execute
@@ -1167,15 +1045,19 @@ public void read_skips_to_next_state_instead_of_returning_0_chars() throws IOExc
 
     // expectations
     context.checking(new Expectations() {{
-        allowing(s1).read(with(any(char[].class)), with(any(int.class)), with(any(int.class)));
-        allowing(s1).getNumCharsRead();
-        will(returnValue(0));
-        ignoring(s1).getNextStates();
+        allowing(s1).read(
+                with(any(char[].class)), 
+                with(any(int.class)), 
+                with(any(int.class))
+        );
+        will(returnValue(new ChunkReader.ReadResult(0, Collections.<State>emptyList())));
 
-        oneOf(s2).read(with(any(char[].class)), with(any(int.class)), with(any(int.class)));
-        ignoring(s2).getNextStates();
-        allowing(s2).getNumCharsRead();
-        will(returnValue(1));
+        oneOf(s2).read(
+                with(any(char[].class)), 
+                with(any(int.class)), 
+                with(any(int.class))
+        );
+        will(returnValue(new ChunkReader.ReadResult(1, Collections.<State>emptyList())));
     }});
 
     // execute
@@ -1198,14 +1080,10 @@ public void read_adjusts_offsets_to_stitch_together_state_outputs() throws IOExc
     // expectations
     context.checking(new Expectations() {{
         allowing(s1).read(target, 0, 10);
-        allowing(s1).getNumCharsRead();
-        will(returnValue(3));
-        ignoring(s1).getNextStates();
+        will(returnValue(new ChunkReader.ReadResult(3, Collections.<State>emptyList())));
 
         oneOf(s2).read(target, 3, 7);
-        ignoring(s2).getNextStates();
-        allowing(s2).getNumCharsRead();
-        will(returnValue(5));
+        will(returnValue(new ChunkReader.ReadResult(5, Collections.<State>emptyList())));
     }});
 
     // execute
@@ -1219,11 +1097,17 @@ public void read_adjusts_offsets_to_stitch_together_state_outputs() throws IOExc
 \begin{chunk}{rococo/chunk reader}
 public static class ChunkReader extends Reader {
     interface State {
-        void read(char cbuf[], int off, int len) throws IOException;
+        ReadResult read(char cbuf[], int off, int len) throws IOException;
+    }
 
-        int getNumCharsRead();
+    static class ReadResult {
+        final int numCharsRead;
+        final List<? extends State> nextStates;
 
-        List<? extends State> getNextStates();
+        ReadResult(int numCharsRead, List<? extends State> nextStates) {
+            this.numCharsRead = numCharsRead;
+            this.nextStates = nextStates;
+        }
     }
 
     private final List<State> stateStack;
@@ -1236,12 +1120,19 @@ public static class ChunkReader extends Reader {
         int charsRead = 0;
         while (charsRead < len && !stateStack.isEmpty()) {
             final State state = stateStack.remove(stateStack.size() - 1);
-            state.read(cbuf, off + charsRead, len - charsRead);
-            stateStack.addAll(state.getNextStates());
-
-            charsRead += state.getNumCharsRead();
+            ReadResult result = state.read(cbuf, off + charsRead, len - charsRead);
+            addStates(result.nextStates);
+            charsRead += result.numCharsRead;
         }
         return charsRead == 0 ? -1 : charsRead;
+    }
+
+    private void addStates(List<? extends State> states) {
+        ListIterator<? extends State> li = states.listIterator(states.size());
+        while (li.hasPrevious()) {
+            State previous = li.previous();
+            stateStack.add(previous);
+        }
     }
 
     public void close() throws IOException {
@@ -1346,12 +1237,19 @@ public static class MixedOutput implements Output {
         final FileOutputStream stream;
         try {
             File f = new File(name);
-            f.getParentFile().mkdirs();
+            ensureParentDirs(f);
             stream = new FileOutputStream(f);
         } catch (FileNotFoundException e) {
             throw new CannotWriteOutputException(e);
         }
         return makeWriter(stream);
+    }
+
+    private void ensureParentDirs(File f) {
+        File dir = f.getParentFile();
+        if (dir != null) {
+            dir.mkdirs();
+        }
     }
 }
 
@@ -1594,7 +1492,7 @@ class Pamphlet(object):
 
     def get_to_end_chunk(self):
         for line in self.f.readlines():
-            if re.match(r"^\\end{chunk}$", line):
+            if re.match(r"^\\"+"end{chunk}$", line):
                 return
             getchunk = re.match(r"\\getchunk\{([^}]*)}$", line)
             if getchunk:
@@ -1650,7 +1548,7 @@ def smart_open(filename=None):
             fh.close()
 
 def ensure_parent_dirs(filename):
-    name = os.path.dirname(filename)
+    name = os.path.dirname(filename) or '.'
     os.makedirs(name, exist_ok=True)
 \end{chunk}
 
@@ -1666,7 +1564,8 @@ if __name__ == "__main__":
 # (non-standard GNU make extension)
 .RECIPEPREFIX +=
 
-WORKDIR = fme
+WORKDIR = fme/work
+TMP = fme/tmp
 PAMPHLET = tangle_book.tex
 
 TANGLE = bin/tangle.pl
@@ -1688,20 +1587,24 @@ reset:
 update_makefile:
     ${EXTRACT} Makefile Makefile
 
-ROCOCO_MAIN = ${WORKDIR}/rococo/src/main/java/org/merizen/tangle
-ROCOCO_TEST = ${WORKDIR}/rococo/src/test/java/org/merizen/tangle
+ROCOCO_MAIN = ${TMP}/rococo/src/main/java/org/merizen/tangle
+ROCOCO_TEST = ${TMP}/rococo/src/test/java/org/merizen/tangle
 
 extract:
-    rm -rf ${WORKDIR}
+    rm -rf ${TMP}
     ${EXTRACT} \
-        shell/tangle.sh ${WORKDIR}/tangle.sh \
-        perl/tangle.pl ${WORKDIR}/tangle.pl \
-        python/tangle.py ${WORKDIR}/tangle.py \
-        rococo/pom.xml  ${WORKDIR}/rococo/pom.xml \
+        shell/tangle.sh ${TMP}/tangle.sh \
+        perl/tangle.pl ${TMP}/tangle.pl \
+        python/tangle.py ${TMP}/tangle.py \
+        rococo/pom.xml  ${TMP}/rococo/pom.xml \
         rococo/Tangle.java ${ROCOCO_MAIN}/Tangle.java \
         rococo/ChunkReaderTest.java ${ROCOCO_TEST}/ChunkReaderTest.java \
-        rococo/OldLatexParserTest.java ${ROCOCO_TEST}/OldLatexParserTest.java \
+        rococo/DumpingFragmentStateTest.java ${ROCOCO_TEST}/DumpingFragmentStateTest.java \
+        rococo/LatexExtractorTest.java ${ROCOCO_TEST}/LatexExtractorTest.java \
         rococo/TangleTest.java ${ROCOCO_TEST}/TangleTest.java
+    mkdir -p ${WORKDIR}
+    rsync -a ${TMP}/ ${WORKDIR}
+    rm -rf ${TMP}
 
 rococo: extract
     cd ${WORKDIR}/rococo; mvn clean install
