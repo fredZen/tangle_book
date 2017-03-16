@@ -739,11 +739,7 @@ private class Parser {
         while (beginChunkCommandMatcher.find(start)) {
             start = newLinePositionAfter(beginChunkCommandMatcher.end());
             chunkName = beginChunkCommandMatcher.group(1);
-            for(;;) {
-                if (!inChunkCommandMatcher.find(start)) {
-                    addState(chunkName, fragment(start, in.length()));
-                    break;
-                }
+            while(inChunkCommandMatcher.find(start)) {
                 final int end = inChunkCommandMatcher.start();
                 addState(chunkName, fragment(start, end));
                 start = newLinePositionAfter(inChunkCommandMatcher.end());
