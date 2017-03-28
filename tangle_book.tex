@@ -239,13 +239,13 @@ while [[ $# -gt 0 ]]; do
 done
 \end{chunk}
 
-\chapter{Rococo Java}
+\chapter{Java}
 
-\section{Rules for rococo}
+\section{Rules for java}
 
 \section{General overview}
 
-\begin{chunk}{rococo/Tangle.java}
+\begin{chunk}{java/Tangle.java}
 package org.merizen.tangle;
 
 import java.io.*;
@@ -287,12 +287,12 @@ public class Tangle {
         CharSequence makeCharSequence(ByteBuffer byteBuffer);
     }
 
-\getchunk{rococo/pass through codec}
-\getchunk{rococo/mapped file input}
-\getchunk{rococo/chunk reader}
-\getchunk{rococo/latex extractor}
-\getchunk{rococo/output}
-\getchunk{rococo/exceptions}
+\getchunk{java/pass through codec}
+\getchunk{java/mapped file input}
+\getchunk{java/chunk reader}
+\getchunk{java/latex extractor}
+\getchunk{java/output}
+\getchunk{java/exceptions}
 
     public static void main(String[] args) {
         try {
@@ -322,7 +322,7 @@ public class Tangle {
 \section{Parsing program arguments}
 Run extracts the chunk whose name was passed as the second parameter.
 
-\begin{chunk}{rococo/tangle tests}
+\begin{chunk}{java/tangle tests}
 @Test
 public void run_with_one_chunk_name() throws IOException {
     // expectations
@@ -339,7 +339,7 @@ public void run_with_one_chunk_name() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/TangleTest.java}
+\begin{chunk}{java/TangleTest.java}
 package org.merizen.tangle;
 
 import org.jmock.Expectations;
@@ -377,13 +377,13 @@ public class TangleTest {
         extractor = context.mock(Tangle.Extractor.class);
         main = new Tangle(in, out, extractorFactory);
     }
-\getchunk{rococo/tangle tests}
+\getchunk{java/tangle tests}
 }
 \end{chunk}
 
 Run opens the file whose name was passed as the first parameter.
 
-\begin{chunk}{rococo/tangle tests}
+\begin{chunk}{java/tangle tests}
 @Test
 public void run_opens_the_pamphlet() throws IOException {
     // expectations
@@ -398,7 +398,7 @@ public void run_opens_the_pamphlet() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/tangle tests}
+\begin{chunk}{java/tangle tests}
 @Test
 public void run_can_extract_multiple_chunks() throws IOException {
     // expectations
@@ -429,7 +429,7 @@ public void run_can_extract_multiple_chunks() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/tangle tests}
+\begin{chunk}{java/tangle tests}
 @Test
 public void run_expects_at_least_two_parameters() throws IOException {
     // set up
@@ -449,7 +449,7 @@ public void run_expects_at_least_two_parameters() throws IOException {
 \end{chunk}
 
 Run if there are more than two parameters then there must be an odd number of parameters.
-\begin{chunk}{rococo/tangle tests}
+\begin{chunk}{java/tangle tests}
 @Test
 public void run_with_multiple_chunks() throws IOException {
     // set up
@@ -468,7 +468,7 @@ public void run_with_multiple_chunks() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/Tangle.java}
+\begin{chunk}{java/Tangle.java}
     void run(String[] args) throws WrongNumberOfArgumentsException {
         ensureCorrectArgumentCount(args);
         final CharSequence pamphlet = in.open(new File(args[0]));
@@ -498,7 +498,7 @@ public void run_with_multiple_chunks() throws IOException {
 \end{chunk}
 
 \section{Pumping the chunk extractor’s output into a file}
-\begin{chunk}{rococo/tangle tests}
+\begin{chunk}{java/tangle tests}
 @Test
 public void copyStream_copies_its_input_to_its_output() {
     // set up
@@ -518,7 +518,7 @@ public void copyStream_copies_its_input_to_its_output() {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/Tangle.java}
+\begin{chunk}{java/Tangle.java}
     void copyStream(Reader in, Writer out) {
         char[] buffer = new char[1024];
         int len;
@@ -555,7 +555,7 @@ public void copyStream_copies_its_input_to_its_output() {
 \end{chunk}
 
 \section{The latex chunk extractor}
-\begin{chunk}{rococo/LatexExtractorTest.java}
+\begin{chunk}{java/LatexExtractorTest.java}
 package org.merizen.tangle;
 
 import org.junit.Test;
@@ -568,11 +568,11 @@ import java.nio.CharBuffer;
 import static org.assertj.core.api.Assertions.*;
 
 public class LatexExtractorTest {
-\getchunk{rococo/latex extractor tests}
+\getchunk{java/latex extractor tests}
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex extractor tests}
+\begin{chunk}{java/latex extractor tests}
 @Test
 public void the_makePamphlet_helper_creates_a_charbuffer_with_newlines() {
     // execute
@@ -592,7 +592,7 @@ private CharSequence makePamphlet(String... lines) {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex extractor tests}
+\begin{chunk}{java/latex extractor tests}
 @Test
 public void read_a_chunk_in_a_single_piece() throws IOException {
     // set up
@@ -626,7 +626,7 @@ private String dump(CharBuffer b) {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex extractor tests}
+\begin{chunk}{java/latex extractor tests}
 @Test
 public void read_a_chunk_in_two_pieces() throws IOException {
     // set up
@@ -653,7 +653,7 @@ public void read_a_chunk_in_two_pieces() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex extractor tests}
+\begin{chunk}{java/latex extractor tests}
 @Test
 public void read_a_chunk_with_getchunk() throws IOException {
     // set up
@@ -681,7 +681,7 @@ public void read_a_chunk_with_getchunk() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex extractor}
+\begin{chunk}{java/latex extractor}
 public static class LatexExtractor implements Extractor {
     private final CharSequence in;
     private final Map<String, List<ChunkReader.State>> chunksByName 
@@ -714,13 +714,13 @@ public static class LatexExtractor implements Extractor {
         return new ChunkReader(singletonList(new GetChunkState(chunkName)));
     }
 
-\getchunk{rococo/latex parser}
-\getchunk{rococo/latex reader states}
+\getchunk{java/latex parser}
+\getchunk{java/latex reader states}
 }
 \end{chunk}
 
 \subsection{The latex parser}
-\begin{chunk}{rococo/latex parser}
+\begin{chunk}{java/latex parser}
 private class Parser {
     private final Matcher beginChunkCommandMatcher = 
             matcher("^\\\\begin\\{chunk}\\{([^}]*)}$");
@@ -763,7 +763,7 @@ private class Parser {
 
 \subsection{Dumping a fragment}
 
-\begin{chunk}{rococo/dumping fragment state tests}
+\begin{chunk}{java/dumping fragment state tests}
 @Test
 public void DumpingFragmentState_reads_characters_from_the_input() throws IOException {
     // set up
@@ -784,7 +784,7 @@ private State fragment(CharSequence fragment, int start) {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/dumping fragment state tests}
+\begin{chunk}{java/dumping fragment state tests}
 @Test
 public void DumpingFragmentState_starts_reading_at_its_start_offset() throws IOException {
     // set up
@@ -800,7 +800,7 @@ public void DumpingFragmentState_starts_reading_at_its_start_offset() throws IOE
 }
 \end{chunk}
 
-\begin{chunk}{rococo/dumping fragment state tests}
+\begin{chunk}{java/dumping fragment state tests}
 @Test
 public void DumpingFragmentState_starts_writing_at_the_requested_offset() throws IOException {
     // set up
@@ -817,7 +817,7 @@ public void DumpingFragmentState_starts_writing_at_the_requested_offset() throws
 \end{chunk}
 
 DumpingFragmentState when at end of fragment follows up with no state.
-\begin{chunk}{rococo/dumping fragment state tests}
+\begin{chunk}{java/dumping fragment state tests}
 @Test
 public void DumpingFragmentState_at_end_of_fragment() throws IOException {
     final CharSequence fragment = "contents";
@@ -833,7 +833,7 @@ public void DumpingFragmentState_at_end_of_fragment() throws IOException {
 \end{chunk}
 
 DumpingFragmentState when at midfragment follows up with itself with a new offset
-\begin{chunk}{rococo/dumping fragment state tests}
+\begin{chunk}{java/dumping fragment state tests}
 @Test
 public void DumpingFragmentState_when_at_midfragment() throws IOException {
     final CharSequence fragment = "abcdef";
@@ -853,7 +853,7 @@ public void DumpingFragmentState_when_at_midfragment() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/latex reader states}
+\begin{chunk}{java/latex reader states}
 ChunkReader.State fragment(final int start, final int end) {
     return new ChunkReader.State() {
         public ChunkReader.ReadResult read(char[] cbuf, int off, int len) {
@@ -874,7 +874,7 @@ ChunkReader.State fragment(final int start, final int end) {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/DumpingFragmentStateTest.java}
+\begin{chunk}{java/DumpingFragmentStateTest.java}
 package org.merizen.tangle;
 
 import org.junit.Test;
@@ -890,12 +890,12 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.*;
 
 public class DumpingFragmentStateTest {
-\getchunk{rococo/dumping fragment state tests}
+\getchunk{java/dumping fragment state tests}
 }
 \end{chunk}
 
 \subsection{Refering another chunk}
-\begin{chunk}{rococo/latex reader states}
+\begin{chunk}{java/latex reader states}
 class GetChunkState implements ChunkReader.State {
     private final String chunkName;
 
@@ -910,7 +910,7 @@ class GetChunkState implements ChunkReader.State {
 \end{chunk}
 
 \section{The chunk reader}
-\begin{chunk}{rococo/ChunkReaderTest.java}
+\begin{chunk}{java/ChunkReaderTest.java}
 package org.merizen.tangle;
 
 import org.jmock.Expectations;
@@ -931,11 +931,11 @@ import static org.assertj.core.api.Assertions.*;
 public class ChunkReaderTest {
     @Rule
     public JUnitRuleMockery context = new JUnitRuleMockery();
-\getchunk{rococo/chunk reader tests}
+\getchunk{java/chunk reader tests}
 }
 \end{chunk}
 
-\begin{chunk}{rococo/chunk reader tests}
+\begin{chunk}{java/chunk reader tests}
 @Test
 public void read_with_an_empty_state_stack_signals_end_of_file() throws IOException {
     // set up
@@ -949,7 +949,7 @@ public void read_with_an_empty_state_stack_signals_end_of_file() throws IOExcept
 }
 \end{chunk}
 
-\begin{chunk}{rococo/chunk reader tests}
+\begin{chunk}{java/chunk reader tests}
 @Test
 public void when_there_is_a_state_it_does_the_reading() throws IOException {
     // set up
@@ -971,7 +971,7 @@ public void when_there_is_a_state_it_does_the_reading() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/chunk reader tests}
+\begin{chunk}{java/chunk reader tests}
 @Test
 public void states_are_consumed_by_reading_from_them() throws IOException {
     // set up
@@ -997,7 +997,7 @@ public void states_are_consumed_by_reading_from_them() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/chunk reader tests}
+\begin{chunk}{java/chunk reader tests}
 @Test
 public void read_pushes_followup_states_onto_the_stack() throws IOException {
     // set up
@@ -1042,7 +1042,7 @@ public void read_pushes_followup_states_onto_the_stack() throws IOException {
 }
 \end{chunk}
 
-\begin{chunk}{rococo/chunk reader tests}
+\begin{chunk}{java/chunk reader tests}
 @Test
 public void read_skips_to_next_state_instead_of_returning_0_chars() throws IOException {
     // set up
@@ -1076,7 +1076,7 @@ public void read_skips_to_next_state_instead_of_returning_0_chars() throws IOExc
 }
 \end{chunk}
 
-\begin{chunk}{rococo/chunk reader tests}
+\begin{chunk}{java/chunk reader tests}
 @Test
 public void read_adjusts_offsets_to_stitch_together_state_outputs() throws IOException {
     // set up
@@ -1102,7 +1102,7 @@ public void read_adjusts_offsets_to_stitch_together_state_outputs() throws IOExc
 }
 \end{chunk}
 
-\begin{chunk}{rococo/chunk reader}
+\begin{chunk}{java/chunk reader}
 public static class ChunkReader extends Reader {
     interface State {
         ReadResult read(char cbuf[], int off, int len) throws IOException;
@@ -1149,7 +1149,7 @@ public static class ChunkReader extends Reader {
 \end{chunk}
 
 \section{Exceptions}
-\begin{chunk}{rococo/exceptions}
+\begin{chunk}{java/exceptions}
 static class WrongNumberOfArgumentsException extends FatalException {
     WrongNumberOfArgumentsException() {
         super("Usage: tangle filename chunkname\n" +
@@ -1185,7 +1185,7 @@ static class CannotWriteOutputException extends FatalException {
 \end{chunk}
 
 \section{Input}
-\begin{chunk}{rococo/mapped file input}
+\begin{chunk}{java/mapped file input}
 public static class MappedFileInput implements Input {
     private final Codec codec;
 
@@ -1224,7 +1224,7 @@ public static class MappedFileInput implements Input {
 \end{chunk}
 
 \section{Output}
-\begin{chunk}{rococo/output}
+\begin{chunk}{java/output}
 public static class MixedOutput implements Output {
     private final Codec codec;
 
@@ -1277,7 +1277,7 @@ static class FatalException extends RuntimeException {
 \end{chunk}
 
 \section{The pass-through codec}
-\begin{chunk}{rococo/pass through codec}
+\begin{chunk}{java/pass through codec}
 public static class PassThroughCodec implements Codec {
     private static class PassThroughSequence implements CharSequence {
         final ByteBuffer buffer;
@@ -1336,7 +1336,7 @@ public static class PassThroughCodec implements Codec {
 \end{chunk}
 
 \section{Running the tests}
-\begin{chunk}{rococo/pom.xml}
+\begin{chunk}{java/pom.xml}
 <?xml version="1.0" encoding="UTF-8"?>
 <project xmlns="http://maven.apache.org/POM/4.0.0"
          xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
@@ -1583,20 +1583,20 @@ TANGLE = bin/tangle.pl
 
 EXTRACT = ${TANGLE} ${PAMPHLET}
 
-install: extract rococo
+install: extract java
     cp ${WORKDIR}/tangle.* bin
-    cp ${WORKDIR}/rococo/target/*.jar bin/tangle.jar
+    cp ${WORKDIR}/java/target/*.jar bin/tangle.jar
 
 reset:
     cp germ/* bin
 
-.PHONY: install extract rococo update_makefile reset
+.PHONY: install extract java update_makefile reset
 
 update_makefile:
     ${EXTRACT} Makefile Makefile
 
-ROCOCO_MAIN = ${TMP}/rococo/src/main/java/org/merizen/tangle
-ROCOCO_TEST = ${TMP}/rococo/src/test/java/org/merizen/tangle
+JAVA_MAIN = ${TMP}/java/src/main/java/org/merizen/tangle
+JAVA_TEST = ${TMP}/java/src/test/java/org/merizen/tangle
 
 extract:
     rm -rf ${TMP}
@@ -1604,18 +1604,18 @@ extract:
         shell/tangle.sh ${TMP}/tangle.sh \
         perl/tangle.pl ${TMP}/tangle.pl \
         python/tangle.py ${TMP}/tangle.py \
-        rococo/pom.xml  ${TMP}/rococo/pom.xml \
-        rococo/Tangle.java ${ROCOCO_MAIN}/Tangle.java \
-        rococo/ChunkReaderTest.java ${ROCOCO_TEST}/ChunkReaderTest.java \
-        rococo/DumpingFragmentStateTest.java ${ROCOCO_TEST}/DumpingFragmentStateTest.java \
-        rococo/LatexExtractorTest.java ${ROCOCO_TEST}/LatexExtractorTest.java \
-        rococo/TangleTest.java ${ROCOCO_TEST}/TangleTest.java
+        java/pom.xml  ${TMP}/java/pom.xml \
+        java/Tangle.java ${JAVA_MAIN}/Tangle.java \
+        java/ChunkReaderTest.java ${JAVA_TEST}/ChunkReaderTest.java \
+        java/DumpingFragmentStateTest.java ${JAVA_TEST}/DumpingFragmentStateTest.java \
+        java/LatexExtractorTest.java ${JAVA_TEST}/LatexExtractorTest.java \
+        java/TangleTest.java ${JAVA_TEST}/TangleTest.java
     mkdir -p ${WORKDIR}
     rsync -a ${TMP}/ ${WORKDIR}
     rm -rf ${TMP}
 
-rococo: extract
-    cd ${WORKDIR}/rococo; mvn clean install
+java: extract
+    cd ${WORKDIR}/java; mvn clean install
 \end{chunk}
 
 

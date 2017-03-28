@@ -13,20 +13,20 @@ TANGLE = bin/tangle.pl
 
 EXTRACT = ${TANGLE} ${PAMPHLET}
 
-install: extract rococo
+install: extract java
     cp ${WORKDIR}/tangle.* bin
-    cp ${WORKDIR}/rococo/target/*.jar bin/tangle.jar
+    cp ${WORKDIR}/java/target/*.jar bin/tangle.jar
 
 reset:
     cp germ/* bin
 
-.PHONY: install extract rococo update_makefile reset
+.PHONY: install extract java update_makefile reset
 
 update_makefile:
     ${EXTRACT} Makefile Makefile
 
-ROCOCO_MAIN = ${TMP}/rococo/src/main/java/org/merizen/tangle
-ROCOCO_TEST = ${TMP}/rococo/src/test/java/org/merizen/tangle
+JAVA_MAIN = ${TMP}/java/src/main/java/org/merizen/tangle
+JAVA_TEST = ${TMP}/java/src/test/java/org/merizen/tangle
 
 extract:
     rm -rf ${TMP}
@@ -34,15 +34,15 @@ extract:
         shell/tangle.sh ${TMP}/tangle.sh \
         perl/tangle.pl ${TMP}/tangle.pl \
         python/tangle.py ${TMP}/tangle.py \
-        rococo/pom.xml  ${TMP}/rococo/pom.xml \
-        rococo/Tangle.java ${ROCOCO_MAIN}/Tangle.java \
-        rococo/ChunkReaderTest.java ${ROCOCO_TEST}/ChunkReaderTest.java \
-        rococo/DumpingFragmentStateTest.java ${ROCOCO_TEST}/DumpingFragmentStateTest.java \
-        rococo/LatexExtractorTest.java ${ROCOCO_TEST}/LatexExtractorTest.java \
-        rococo/TangleTest.java ${ROCOCO_TEST}/TangleTest.java
+        java/pom.xml  ${TMP}/java/pom.xml \
+        java/Tangle.java ${JAVA_MAIN}/Tangle.java \
+        java/ChunkReaderTest.java ${JAVA_TEST}/ChunkReaderTest.java \
+        java/DumpingFragmentStateTest.java ${JAVA_TEST}/DumpingFragmentStateTest.java \
+        java/LatexExtractorTest.java ${JAVA_TEST}/LatexExtractorTest.java \
+        java/TangleTest.java ${JAVA_TEST}/TangleTest.java
     mkdir -p ${WORKDIR}
     rsync -a ${TMP}/ ${WORKDIR}
     rm -rf ${TMP}
 
-rococo: extract
-    cd ${WORKDIR}/rococo; mvn clean install
+java: extract
+    cd ${WORKDIR}/java; mvn clean install
