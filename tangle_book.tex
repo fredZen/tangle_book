@@ -1458,10 +1458,9 @@ def tangle(argv):
     chunks = argv[2:]
     chunks.append(None)
 
-    with line_source(argv[1]) as pamphlet:
-        extract(pamphlet, chunks)
+    def pamphlet():
+        return open(argv[1], 'r')
 
-def extract(pamphlet, chunks):
     for chunk, target in pairwise(chunks):
         write(target, get_chunk(pamphlet, chunk))
 
@@ -1472,68 +1471,53 @@ def pairwise(iterable):
 \end{chunk}
 
 \begin{chunk}{python/tangle.py}
-def get_chunk(f, chunk_name):
-    return Pamphlet(f).get_chunk(chunk_name)
-
-class Pamphlet(object):
-    def __init__(self, f):
-        self.f = f
-
-    def get_chunk(self, chunk_name):
-        with self.f.reset():
-            try:
-                while True:
-                    self.skip_to_begin_chunk(chunk_name)
-                    yield from self.get_to_end_chunk()
-            except Pamphlet.EndOfInput:
-                pass
-
-    class EndOfInput(Exception):
-        pass
-
-    def skip_to_begin_chunk(self, chunk_name):
-        escaped = re.escape(chunk_name)
-        for line in self.f.readlines():
-            if re.match(r"^\\begin{chunk}\{%s}$" % escaped, line):
-                return
-        raise Pamphlet.EndOfInput
-
-    def get_to_end_chunk(self):
-        for line in self.f.readlines():
-            if re.match(r"^\\"+"end{chunk}$", line):
-                return
-            getchunk = re.match(r"\\getchunk\{([^}]*)}$", line)
-            if getchunk:
-                yield from self.get_chunk(getchunk.group(1))
-            else:
-                yield line
-        raise Pamphlet.EndOfInput
+def get_chunk(pamphlet, chunk_name):
+    raw_chunk = extract(pamphlet, chunk_name)
+    return expand_getchunk(pamphlet, raw_chunk)
 \end{chunk}
 
 \begin{chunk}{python/tangle.py}
-@contextmanager
-def line_source(file_name):
-    f = open(file_name, 'r')
-    try:
-        yield LineSource(f)
-    finally:
-        f.close()
-
-class LineSource(object):
-    def __init__(self, f):
-        self.f = f
-
-    def readlines(self):
-        return iter(self.f.readline, '')
-
-    @contextmanager
-    def reset(self):
-        pos = self.f.tell()
-        self.f.seek(0)
+def extract(pamphlet, chunk_name):
+    with pamphlet() as lines:
         try:
-            yield
-        finally:
-            self.f.seek(pos)
+            while True:
+                skip_to_begin_chunk(lines, chunk_name)
+                yield from get_to_end_chunk(lines)
+        except EndOfInput:
+            pass
+\end{chunk}
+
+\begin{chunk}{python/tangle.py}
+def skip_to_begin_chunk(lines, chunk_name):
+    pattern = r"^\\begin{chunk}\{%s}$" % re.escape(chunk_name)
+    for line in lines:
+        if re.match(pattern, line):
+            return
+    raise EndOfInput
+\end{chunk}
+
+\begin{chunk}{python/tangle.py}
+def get_to_end_chunk(lines):
+    for line in lines:
+        if re.match(r"^\\"+"end{chunk}$", line):
+            return
+        yield line
+    raise EndOfInput
+\end{chunk}
+
+\begin{chunk}{python/tangle.py}
+class EndOfInput(Exception):
+    pass
+\end{chunk}
+
+\begin{chunk}{python/tangle.py}
+def expand_getchunk(pamphlet, lines):
+    for line in lines:
+        getchunk = re.match(r"\\getchunk\{([^}]*)}$", line)
+        if getchunk:
+            yield from get_chunk(pamphlet, getchunk.group(1))
+        else:
+            yield line
 \end{chunk}
 
 \begin{chunk}{python/tangle.py}
